@@ -1,0 +1,3 @@
+export const RELATIONSHIP_TYPES = ['ONE_TO_ONE','ONE_TO_MANY','MANY_TO_ONE','MANY_TO_MANY'];
+export function normalizeRelationship(r){if(!r?.sourceModule||!r?.targetModule)throw new Error('Relationship requires sourceModule and targetModule');if(!RELATIONSHIP_TYPES.includes(r.type))throw new Error(`Unsupported relationship type: ${r.type}`);return {sourceModule:r.sourceModule,targetModule:r.targetModule,type:r.type,field:r.field||null,required:Boolean(r.required)};}
+export function relationshipMetadata(spec){return (Array.isArray(spec.relationships)?spec.relationships:[]).map(normalizeRelationship);}
