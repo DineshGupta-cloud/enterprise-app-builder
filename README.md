@@ -1,10 +1,43 @@
 # Enterprise App Builder
 
-A production-oriented application scaffolding platform for generating enterprise web applications from a visual project definition.
+A production-oriented, configuration-driven platform for generating different kinds of enterprise web applications from a visual ProjectSpec.
 
-## Vision
+## Product definition
 
-Create a new enterprise application from configuration instead of starting every project from scratch. The builder is designed to generate a consistent, maintainable **React + Spring Boot + MySQL/PostgreSQL** application with security, database migrations, CRUD modules, tests, Docker and CI/CD templates.
+**This is a generic enterprise application builder, not a CRM generator.**
+
+CRM is maintained as a reference/golden example used to validate the generic generator. The same generator architecture is intended to support HRMS, ERP, inventory, hospital, school, banking, e-commerce, or a completely custom application.
+
+```text
+Visual Builder
+      ↓
+ProjectSpec
+      ↓
+Generic Generator
+      ↓
+Backend + Frontend + Database + Security + Infrastructure
+      ↓
+Validated Runnable Application
+```
+
+## Target completion pipeline
+
+```text
+Visual Builder
+  → ProjectSpec
+  → Generic Generator
+  → Runnable Backend
+  → Runnable Frontend
+  → Database / Migrations
+  → JWT / RBAC
+  → CRUD / DTO / Mapper / Service / Controller
+  → Relationships
+  → Editable DataGrid / Forms
+  → Dashboard
+  → Automated Tests
+  → Docker
+  → Validated ZIP Project
+```
 
 ## Target stack
 
@@ -17,6 +50,7 @@ Create a new enterprise application from configuration instead of starting every
 - Spring Security
 - JWT authentication
 - Role-based access control (RBAC)
+- Data-scope authorization
 - Flyway
 - OpenAPI / Swagger
 - Maven
@@ -27,7 +61,7 @@ Create a new enterprise application from configuration instead of starting every
 - Material UI (MUI)
 - React Router
 - Axios
-- Generated authentication and CRUD screens
+- Generated authentication, dashboard, CRUD tables and forms
 
 ### Infrastructure
 - MySQL or PostgreSQL
@@ -35,57 +69,107 @@ Create a new enterprise application from configuration instead of starting every
 - GitHub Actions
 - Environment-based configuration
 
-## Builder workflow
+## Generic ProjectSpec
+
+The generator consumes a domain-neutral ProjectSpec. It must not require CRM-specific modules.
 
 ```text
-Create Application
-      ↓
-Project Settings
-      ↓
-Database
-      ↓
-Authentication / RBAC
-      ↓
-Modules
-      ↓
-Fields / Relationships
-      ↓
-Review
-      ↓
-Generate Application
-      ↓
-Download ZIP
-      ↓
-Run with Docker / Maven / npm
+ProjectSpec
+├── Project
+├── Organization
+├── Modules
+│   ├── Fields
+│   ├── Relationships
+│   ├── Validation
+│   ├── UI
+│   └── Workflow
+├── Roles
+├── Permissions
+├── Data Scopes
+├── Dashboard
+├── Reports
+├── Integrations
+└── Deployment
 ```
 
-## Enterprise module catalog
-
-The builder supports reusable presets for common enterprise applications. Presets are not a limitation; custom modules can be defined from the module designer.
-
-### Organization
+### Supported module types
 
 ```text
-Company
-  └── Branch
-       └── Department
-            └── Designation
-                 └── Employee
-                      └── User
-                           ├── Role
-                           └── Permission
+STANDARD
+MASTER
+TRANSACTION
+WORKFLOW
+DOCUMENT
+APPROVAL
+REPORT
 ```
 
-### CRM
+### Supported relationships
 
-- Customer
-- Lead
-- Vendor
-- Product
-- Task
-- Activity
-- Note
-- Follow-up
+```text
+ONE_TO_ONE
+ONE_TO_MANY
+MANY_TO_ONE
+MANY_TO_MANY
+```
+
+### Supported data scopes
+
+```text
+ALL
+COMPANY
+BRANCH
+DEPARTMENT
+SELF
+```
+
+The generic ProjectSpec model and validation live in `generator/src/projectSpec.js`.
+
+## Generic generator
+
+`generator/src/genericGenerator.js` consumes the ProjectSpec and creates a generated-project manifest/configuration structure without hard-coded CRM business logic.
+
+The generator derives module keys, class names, fields and relationships from the specification and carries roles, dashboard, workflows, reports and integrations into the generated project configuration.
+
+## Reference example: CRM
+
+CRM is a **golden/reference project**, not the product definition.
+
+The example is available at:
+
+`generator/examples/crm-project-spec.json`
+
+It demonstrates:
+
+```text
+Company → Branch → Department → Designation → Employee
+
+Customer
+Lead → Customer / Employee
+Task → Customer / Employee
+
+ADMIN            → ALL
+SALES_MANAGER    → BRANCH
+SALES_EXECUTIVE  → SELF
+```
+
+The same generic engine must be capable of accepting a different ProjectSpec such as:
+
+```text
+HRMS
+Employee / Attendance / Leave / Payroll
+
+Inventory
+Product / Warehouse / Stock / Purchase / Supplier
+
+Hospital
+Patient / Doctor / Appointment / Billing
+
+School
+Student / Teacher / Course / Attendance / Result
+```
+
+without adding application-specific generator code for each domain.
 
 ## Generated application architecture
 
@@ -99,18 +183,19 @@ Generated Application
 │       │   ├── application bootstrap
 │       │   ├── security/
 │       │   ├── shared/
-│       │   └── module/
+│       │   └── modules/
 │       └── resources/
 │           ├── application.yml
 │           └── db/migration/
 ├── frontend/
 │   ├── package.json
-│   ├── vite.config.js
 │   └── src/
 │       ├── auth/
+│       ├── dashboard/
 │       ├── layout/
 │       ├── modules/
 │       └── services/
+├── database/
 ├── docker-compose.yml
 └── .github/workflows/
 ```
@@ -135,23 +220,59 @@ Controller
 Validation / Exception Handling / Security
 ```
 
-Generated frontend modules follow:
+Frontend modules are intended to follow:
 
 ```text
 API service
   ↓
-List / Table
+Editable DataGrid
   ↓
 Create / Edit Form
+  ↓
+Relationship Lookups
   ↓
 Validation
   ↓
 Pagination / Search / Sorting
+  ↓
+Permission-aware actions
+```
+
+## Builder workflow
+
+```text
+Create Application
+      ↓
+Project Settings
+      ↓
+Database
+      ↓
+Authentication / RBAC
+      ↓
+Organization
+      ↓
+Modules
+      ↓
+Fields / Validation
+      ↓
+Relationships
+      ↓
+Data Scopes
+      ↓
+Dashboard / Reports / Workflows
+      ↓
+Review ProjectSpec
+      ↓
+Generate Application
+      ↓
+Validate Build / Tests
+      ↓
+Download ZIP
 ```
 
 ## Quality gate
 
-A generated sample application is considered complete only when it can pass the following checks:
+A generated application is considered complete only when it can pass:
 
 - Database starts successfully
 - Flyway migrations execute successfully
@@ -159,18 +280,21 @@ A generated sample application is considered complete only when it can pass the 
 - Spring Boot starts successfully
 - Login returns a JWT
 - JWT-protected endpoints reject unauthenticated requests
-- RBAC restrictions work
+- RBAC restrictions work at the backend
+- Data scopes are enforced at the backend
 - Generated CRUD endpoints work
+- Relationships work through generated APIs and UI lookups
 - Validation and global error handling work
 - Pagination, filtering and sorting work where configured
 - React application builds successfully
-- React login/authentication works
-- Generated CRUD table and forms build and operate
+- React authentication works
+- Generated editable tables and forms operate
+- Dashboard loads data according to the logged-in user's scope
 - Backend tests pass
 - Frontend tests pass
 - Docker image builds successfully
 - Docker Compose starts the application stack
-- GitHub Actions build/test workflow passes
+- Generated project can be packaged as a ZIP
 
 ## Run the Builder locally
 
@@ -203,109 +327,69 @@ Open the local Vite URL displayed by the terminal.
 2. Create a new project.
 3. Enter the application name and Java package name.
 4. Select MySQL or PostgreSQL.
-5. Configure authentication and roles.
-6. Add the modules you need.
-7. Define fields and relationships.
-8. Review the generated project specification.
-9. Click **Generate Application**.
-10. Download the generated ZIP.
-
-## Run a generated application
-
-After extracting a generated project:
-
-### Start the database
-
-```bash
-docker compose up -d db
-```
-
-### Start the backend
-
-```bash
-cd backend
-mvn spring-boot:run
-```
-
-### Start the frontend
-
-In another terminal:
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Swagger is available at:
-
-```text
-http://localhost:8080/swagger-ui.html
-```
-
-The exact generated ports and environment variables are defined by the generated project configuration.
-
-## Environment configuration
-
-Do not commit real passwords, JWT secrets, API keys or production credentials. Generated applications should read environment-specific secrets from environment variables or an external secret manager.
-
-Typical local variables include:
-
-```text
-DB_NAME=enterprise_db
-DB_USER=app
-DB_PASSWORD=app
-SERVER_PORT=8080
-```
-
-## Repository structure
-
-```text
-enterprise-app-builder/
-├── frontend/                 # Builder UI
-├── generator/                # Generator engine, contracts and templates
-├── docs/                     # Architecture and generated-project guides
-└── .github/                  # CI configuration
-```
-
-## Development principles
-
-1. Configuration over hard-coded generation.
-2. Enterprise conventions by default.
-3. Backend, frontend, database and infrastructure must be generated from the same ProjectSpec.
-4. Generated code must be understandable and maintainable.
-5. Security must be enabled by default for protected APIs.
-6. Database changes use migrations rather than destructive automatic schema creation.
-7. Secrets must never be generated as production credentials.
-8. Every generated module should support validation, audit fields, API documentation, pagination and security hooks where applicable.
-9. The generator should validate its output before offering a project for download.
+5. Configure authentication, roles, permissions and data scopes.
+6. Add any modules required by the application.
+7. Define fields, validation and relationships.
+8. Configure dashboard, reports and workflows as required.
+9. Review the generated ProjectSpec.
+10. Click **Generate Application**.
+11. Run the generator validation/build checks.
+12. Download the generated ZIP when validation succeeds.
 
 ## Project status
 
-**Foundation → Enterprise Generator implementation**
+**Generic ProjectSpec → Generator Integration**
 
-The repository contains the Builder UI, project specification model, generator templates and generated-project documentation. The remaining implementation work is to keep integrating and validating the complete generation pipeline so that the Builder produces a genuinely runnable end-to-end application rather than a collection of disconnected templates.
+Implemented foundation:
+
+- Builder project model
+- Generic ProjectSpec creation and validation
+- Generic module/relationship/data-scope contracts
+- ProjectSpec-driven generic generator pipeline
+- CRM golden/reference ProjectSpec
+- Generator and generated-project documentation
+- Dashboard/module metadata contracts
+- JWT/RBAC migration configuration foundation
+
+The remaining work is to connect the generic generator to the complete production code generators and validate generated applications end-to-end.
 
 ## Roadmap
 
 - [x] Repository foundation
-- [x] Project configuration model
-- [x] Module designer UI
-- [x] JSON specification export
-- [x] Generator bootstrap templates
-- [x] Organization module templates
-- [x] Generated-project run documentation
-- [ ] Fully integrated Spring Boot generator
-- [ ] Fully integrated React generator
-- [ ] Complete MySQL/PostgreSQL + Flyway generation
-- [ ] JWT authentication and RBAC generation
+- [x] Generic ProjectSpec model
+- [x] ProjectSpec validation
+- [x] Module designer foundation
+- [x] Relationship contract
+- [x] Data-scope contract
+- [x] CRM golden/reference specification
+- [x] Generic generator pipeline foundation
+- [ ] Fully integrated Spring Boot source generation
 - [ ] Complete DTO/mapper/service/controller generation
-- [ ] Generated CRUD forms/tables
+- [ ] Complete database schema + Flyway generation
+- [ ] JWT authentication generation
+- [ ] Complete RBAC and data-scope enforcement generation
+- [ ] Fully generated React DataGrid/forms
+- [ ] Relationship-aware frontend generation
+- [ ] Generated dashboard implementation
 - [ ] Backend and frontend test generation
-- [ ] Validated ZIP project export
+- [ ] Build/test validation of generated projects
 - [ ] Docker end-to-end validation
+- [ ] Validated ZIP export
 - [ ] GitHub repository export
-- [ ] AI-assisted generation
+- [ ] AI-assisted ProjectSpec generation
+
+## Development principles
+
+1. Configuration over hard-coded domain logic.
+2. CRM is a reference implementation, never the generator's product model.
+3. Backend, frontend, database and infrastructure are generated from the same ProjectSpec.
+4. Generated code must be understandable and maintainable.
+5. Security is enabled by default for protected APIs.
+6. Database changes use migrations.
+7. Secrets are never generated as production credentials.
+8. Generated modules support validation, audit fields, API documentation, pagination and security hooks where applicable.
+9. The generator must validate its output before offering a project for download.
+10. A new application domain should be representable by ProjectSpec without modifying the generator's core domain logic.
 
 ## License
 
