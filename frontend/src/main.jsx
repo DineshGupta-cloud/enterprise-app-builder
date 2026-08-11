@@ -1,15 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import {
-  AppBar, Box, Button, Chip, Container, CssBaseline, Divider, Drawer,
-  IconButton, List, ListItemButton, ListItemText, MenuItem, Paper, Select,
-  Stack, Step, StepLabel, Stepper, TextField, ThemeProvider, Toolbar,
-  Typography, createTheme
-} from '@mui/material';
+import { AppBar, Box, Button, Chip, Container, CssBaseline, Divider, Drawer, IconButton, List, ListItemButton, ListItemText, MenuItem, Paper, Snackbar, Stack, Step, StepLabel, Stepper, TextField, ThemeProvider, Toolbar, Typography, createTheme } from '@mui/material';
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
 import DownloadRoundedIcon from '@mui/icons-material/DownloadRounded';
 import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded';
+import RocketLaunchRoundedIcon from '@mui/icons-material/RocketLaunchRounded';
 
 const steps = ['Project', 'Architecture', 'Modules', 'Review'];
 const defaultModules = [
@@ -17,115 +13,38 @@ const defaultModules = [
   { name: 'Customer', entity: 'Customer', fields: 'customerNumber, name, email, mobile, status' },
   { name: 'Lead', entity: 'Lead', fields: 'leadNumber, name, email, source, status, priority' }
 ];
+const theme = createTheme({ palette: { mode: 'dark', background: { default: '#080d18', paper: '#101827' }, primary: { main: '#6ee7b7' } }, typography: { fontFamily: 'Inter, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif' }, shape: { borderRadius: 12 } });
 
-const theme = createTheme({
-  palette: { mode: 'dark', background: { default: '#080d18', paper: '#101827' }, primary: { main: '#6ee7b7' } },
-  typography: { fontFamily: 'Inter, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif' },
-  shape: { borderRadius: 12 }
-});
-
-function downloadSpec(spec) {
-  const blob = new Blob([JSON.stringify(spec, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = `${spec.project.name || 'enterprise-app'}-spec.json`;
-  anchor.click();
-  URL.revokeObjectURL(url);
+function safeFileName(value) { return (value || 'enterprise-app').replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase(); }
+function downloadBlob(blob, fileName) { const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = fileName; document.body.appendChild(anchor); anchor.click(); anchor.remove(); setTimeout(() => URL.revokeObjectURL(url), 500); }
+function downloadSpec(spec) { downloadBlob(new Blob([JSON.stringify(spec, null, 2)], { type: 'application/json' }), `${safeFileName(spec.project.name)}-spec.json`); }
+function zipStore(files) {
+  const encoder = new TextEncoder(), entries = Object.entries(files), localParts = [], centralParts = []; let offset = 0;
+  for (const [name, content] of entries) { const nameBytes = encoder.encode(name), data = encoder.encode(content), crc = crc32(data); const local = new Uint8Array(30 + nameBytes.length + data.length), lv = new DataView(local.buffer); lv.setUint32(0, 0x04034b50, true); lv.setUint16(4, 20, true); lv.setUint32(14, crc, true); lv.setUint32(18, data.length, true); lv.setUint32(22, data.length, true); lv.setUint16(26, nameBytes.length, true); local.set(nameBytes, 30); local.set(data, 30 + nameBytes.length); localParts.push(local);
+    const central = new Uint8Array(46 + nameBytes.length), cv = new DataView(central.buffer); cv.setUint32(0, 0x02014b50, true); cv.setUint16(4, 20, true); cv.setUint16(6, 20, true); cv.setUint32(16, crc, true); cv.setUint32(20, data.length, true); cv.setUint32(24, data.length, true); cv.setUint16(28, nameBytes.length, true); cv.setUint32(42, offset, true); central.set(nameBytes, 46); centralParts.push(central); offset += local.length; }
+  const centralSize = centralParts.reduce((sum, part) => sum + part.length, 0), end = new Uint8Array(22), ev = new DataView(end.buffer); ev.setUint32(0, 0x06054b50, true); ev.setUint16(8, entries.length, true); ev.setUint16(10, entries.length, true); ev.setUint32(12, centralSize, true); ev.setUint32(16, offset, true); return new Blob([...localParts, ...centralParts, end], { type: 'application/zip' });
 }
+function crc32(bytes) { let crc = 0xffffffff; for (const byte of bytes) { crc ^= byte; for (let i = 0; i < 8; i++) crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0); } return (crc ^ 0xffffffff) >>> 0; }
 
 function App() {
-  const [step, setStep] = useState(0);
-  const [project, setProject] = useState({ name: 'Enterprise CRM', packageName: 'com.example.crm', database: 'mysql', java: '17' });
-  const [architecture, setArchitecture] = useState({ backend: 'spring-boot', frontend: 'react-mui', security: 'jwt-rbac', migration: 'flyway' });
-  const [modules, setModules] = useState(defaultModules);
-
-  const spec = useMemo(() => ({ version: '0.1.0', project, architecture, modules }), [project, architecture, modules]);
-
-  const updateProject = (key, value) => setProject((current) => ({ ...current, [key]: value }));
-  const updateArchitecture = (key, value) => setArchitecture((current) => ({ ...current, [key]: value }));
-  const addModule = () => setModules((current) => [...current, { name: 'New Module', entity: 'NewEntity', fields: 'name, description, active' }]);
-  const removeModule = (index) => setModules((current) => current.filter((_, i) => i !== index));
-  const updateModule = (index, key, value) => setModules((current) => current.map((item, i) => i === index ? { ...item, [key]: value } : item));
-
-  return (
-    <Box sx={{ minHeight: '100vh' }}>
-      <AppBar position="sticky" elevation={0} color="transparent" sx={{ borderBottom: '1px solid #202a3b', backdropFilter: 'blur(12px)' }}>
-        <Toolbar sx={{ maxWidth: 1400, width: '100%', mx: 'auto' }}>
-          <AutoAwesomeRoundedIcon sx={{ color: 'primary.main', mr: 1 }} />
-          <Typography variant="h6" fontWeight={800}>Enterprise App Builder</Typography>
-          <Chip size="small" label="v0.1 Foundation" sx={{ ml: 2 }} />
-          <Box sx={{ flex: 1 }} />
-          <Button startIcon={<DownloadRoundedIcon />} onClick={() => downloadSpec(spec)}>Export Spec</Button>
-        </Toolbar>
-      </AppBar>
-
-      <Drawer variant="permanent" sx={{ '& .MuiDrawer-paper': { width: 240, boxSizing: 'border-box', top: 64, background: '#0b1220', borderRight: '1px solid #202a3b' } }}>
-        <List sx={{ p: 2 }}>
-          {['Project Designer', 'Architecture', 'Modules', 'Generated Output', 'Settings'].map((label, index) => (
-            <ListItemButton key={label} selected={step === Math.min(index, 3)} onClick={() => setStep(Math.min(index, 3))} sx={{ mb: 0.5, borderRadius: 2 }}>
-              <ListItemText primary={label} />
-            </ListItemButton>
-          ))}
-        </List>
-      </Drawer>
-
-      <Box sx={{ ml: '240px' }}>
-        <Container maxWidth="lg" sx={{ py: 5 }}>
-          <Stack spacing={1} sx={{ mb: 4 }}>
-            <Typography variant="overline" color="primary.main">Enterprise scaffolding platform</Typography>
-            <Typography variant="h3" fontWeight={850}>Design once. Generate consistently.</Typography>
-            <Typography color="text.secondary" maxWidth={760}>Define your application's architecture and business modules. This specification becomes the contract for the future Spring Boot, React, database, test and deployment generators.</Typography>
-          </Stack>
-
-          <Stepper activeStep={step} sx={{ mb: 5 }}>
-            {steps.map((label) => <Step key={label}><StepLabel>{label}</StepLabel></Step>)}
-          </Stepper>
-
-          {step === 0 && <ProjectStep project={project} updateProject={updateProject} />}
-          {step === 1 && <ArchitectureStep architecture={architecture} updateArchitecture={updateArchitecture} />}
-          {step === 2 && <ModulesStep modules={modules} addModule={addModule} removeModule={removeModule} updateModule={updateModule} />}
-          {step === 3 && <ReviewStep spec={spec} />}
-
-          <Stack direction="row" justifyContent="space-between" sx={{ mt: 4 }}>
-            <Button disabled={step === 0} onClick={() => setStep((s) => s - 1)}>Back</Button>
-            {step < steps.length - 1 ? <Button variant="contained" onClick={() => setStep((s) => s + 1)}>Continue</Button> : <Button variant="contained" startIcon={<DownloadRoundedIcon />} onClick={() => downloadSpec(spec)}>Export Project Specification</Button>}
-          </Stack>
-        </Container>
-      </Box>
-    </Box>
-  );
+  const [step, setStep] = useState(0); const [project, setProject] = useState({ name: 'Enterprise CRM', packageName: 'com.example.crm', database: 'mysql', java: '17' }); const [architecture, setArchitecture] = useState({ backend: 'spring-boot', frontend: 'react-mui', security: 'jwt-rbac', migration: 'flyway' }); const [modules, setModules] = useState(defaultModules); const [message, setMessage] = useState('');
+  const spec = useMemo(() => ({ version: '0.2.0', project, architecture, modules }), [project, architecture, modules]);
+  const updateProject = (key, value) => setProject((current) => ({ ...current, [key]: value })); const updateArchitecture = (key, value) => setArchitecture((current) => ({ ...current, [key]: value })); const addModule = () => setModules((current) => [...current, { name: 'New Module', entity: 'NewEntity', fields: 'name, description, active' }]); const removeModule = (index) => setModules((current) => current.filter((_, i) => i !== index)); const updateModule = (index, key, value) => setModules((current) => current.map((item, i) => i === index ? { ...item, [key]: value } : item));
+  const generate = () => { const validation = validateClientSpec(spec); if (!validation.valid) { setMessage(validation.errors[0]); return; } const files = buildClientProject(spec); downloadBlob(zipStore(files), `${safeFileName(project.name)}-generated.zip`); setMessage(`Generated ${Object.keys(files).length} files successfully.`); };
+  return <Box sx={{ minHeight: '100vh' }}><AppBar position="sticky" elevation={0} color="transparent" sx={{ borderBottom: '1px solid #202a3b', backdropFilter: 'blur(12px)' }}><Toolbar sx={{ maxWidth: 1400, width: '100%', mx: 'auto' }}><AutoAwesomeRoundedIcon sx={{ color: 'primary.main', mr: 1 }} /><Typography variant="h6" fontWeight={800}>Enterprise App Builder</Typography><Chip size="small" label="v0.2 Generator" sx={{ ml: 2 }} /><Box sx={{ flex: 1 }} /><Button startIcon={<DownloadRoundedIcon />} onClick={() => downloadSpec(spec)}>Export Spec</Button><Button sx={{ ml: 1 }} variant="contained" startIcon={<RocketLaunchRoundedIcon />} onClick={generate}>Generate Application</Button></Toolbar></AppBar>
+    <Drawer variant="permanent" sx={{ '& .MuiDrawer-paper': { width: 240, boxSizing: 'border-box', top: 64, background: '#0b1220', borderRight: '1px solid #202a3b' } }}><List sx={{ p: 2 }}>{['Project Designer', 'Architecture', 'Modules', 'Generated Output', 'Settings'].map((label, index) => <ListItemButton key={label} selected={step === Math.min(index, 3)} onClick={() => setStep(Math.min(index, 3))} sx={{ mb: .5, borderRadius: 2 }}><ListItemText primary={label} /></ListItemButton>)}</List></Drawer>
+    <Box sx={{ ml: '240px' }}><Container maxWidth="lg" sx={{ py: 5 }}><Stack spacing={1} sx={{ mb: 4 }}><Typography variant="overline" color="primary.main">Enterprise scaffolding platform</Typography><Typography variant="h3" fontWeight={850}>Design once. Generate consistently.</Typography><Typography color="text.secondary" maxWidth={760}>Configure an application and generate a downloadable source project without manually creating every file.</Typography></Stack><Stepper activeStep={step} sx={{ mb: 5 }}>{steps.map((label) => <Step key={label}><StepLabel>{label}</StepLabel></Step>)}</Stepper>
+      {step === 0 && <ProjectStep project={project} updateProject={updateProject} />}{step === 1 && <ArchitectureStep architecture={architecture} updateArchitecture={updateArchitecture} />}{step === 2 && <ModulesStep modules={modules} addModule={addModule} removeModule={removeModule} updateModule={updateModule} />}{step === 3 && <ReviewStep spec={spec} generate={generate} />}
+      <Stack direction="row" justifyContent="space-between" sx={{ mt: 4 }}><Button disabled={step === 0} onClick={() => setStep((s) => s - 1)}>Back</Button>{step < 3 ? <Button variant="contained" onClick={() => setStep((s) => s + 1)}>Continue</Button> : <Button variant="contained" startIcon={<RocketLaunchRoundedIcon />} onClick={generate}>Generate Application</Button>}</Stack></Container></Box><Snackbar open={Boolean(message)} autoHideDuration={5000} onClose={() => setMessage('')} message={message} /></Box>;
 }
-
-function ProjectStep({ project, updateProject }) {
-  return <Paper sx={{ p: 4 }}>
-    <Typography variant="h5" fontWeight={750} gutterBottom>Project foundation</Typography>
-    <Typography color="text.secondary" sx={{ mb: 3 }}>These values drive package names, generated configuration and deployment metadata.</Typography>
-    <Stack spacing={2}>
-      <TextField label="Project name" value={project.name} onChange={(e) => updateProject('name', e.target.value)} fullWidth />
-      <TextField label="Java package" value={project.packageName} onChange={(e) => updateProject('packageName', e.target.value)} fullWidth />
-      <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
-        <TextField select label="Java" value={project.java} onChange={(e) => updateProject('java', e.target.value)} fullWidth><MenuItem value="17">Java 17</MenuItem><MenuItem value="21">Java 21</MenuItem></TextField>
-        <TextField select label="Database" value={project.database} onChange={(e) => updateProject('database', e.target.value)} fullWidth><MenuItem value="mysql">MySQL</MenuItem><MenuItem value="postgresql">PostgreSQL</MenuItem></TextField>
-      </Stack>
-    </Stack>
-  </Paper>;
-}
-
-function ArchitectureStep({ architecture, updateArchitecture }) {
-  const fields = [['backend', 'Backend', ['spring-boot', 'spring-cloud']], ['frontend', 'Frontend', ['react-mui', 'react-tailwind']], ['security', 'Security', ['jwt-rbac', 'oauth2']], ['migration', 'Database migrations', ['flyway', 'liquibase']]];
-  return <Paper sx={{ p: 4 }}><Typography variant="h5" fontWeight={750} gutterBottom>Architecture standards</Typography><Typography color="text.secondary" sx={{ mb: 3 }}>Select the defaults every generated project should inherit.</Typography><Stack spacing={2}>{fields.map(([key, label, values]) => <TextField key={key} select label={label} value={architecture[key]} onChange={(e) => updateArchitecture(key, e.target.value)}>{values.map((v) => <MenuItem key={v} value={v}>{v}</MenuItem>)}</TextField>)}</Stack></Paper>;
-}
-
-function ModulesStep({ modules, addModule, removeModule, updateModule }) {
-  return <Stack spacing={2}>
-    <Stack direction="row" justifyContent="space-between" alignItems="center"><Box><Typography variant="h5" fontWeight={750}>Business modules</Typography><Typography color="text.secondary">Each module will eventually generate entity, DTO, mapper, repository, service, controller, UI and tests.</Typography></Box><Button startIcon={<AddRoundedIcon />} variant="contained" onClick={addModule}>Add Module</Button></Stack>
-    {modules.map((module, index) => <Paper key={`${module.name}-${index}`} sx={{ p: 3 }}><Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems="center"><TextField label="Module" value={module.name} onChange={(e) => updateModule(index, 'name', e.target.value)} sx={{ flex: 1 }} /><TextField label="Entity" value={module.entity} onChange={(e) => updateModule(index, 'entity', e.target.value)} sx={{ flex: 1 }} /><TextField label="Fields (comma separated)" value={module.fields} onChange={(e) => updateModule(index, 'fields', e.target.value)} sx={{ flex: 3 }} /><IconButton color="error" onClick={() => removeModule(index)}><DeleteOutlineRoundedIcon /></IconButton></Stack></Paper>)}
-  </Stack>;
-}
-
-function ReviewStep({ spec }) {
-  return <Paper sx={{ p: 4 }}><Typography variant="h5" fontWeight={750} gutterBottom>Generation contract</Typography><Typography color="text.secondary" sx={{ mb: 3 }}>This is the normalized project specification that future generator engines will consume.</Typography><Box component="pre" sx={{ m: 0, p: 3, overflow: 'auto', borderRadius: 2, bgcolor: '#070b13', fontSize: 13 }}>{JSON.stringify(spec, null, 2)}</Box><Divider sx={{ my: 3 }} /><Typography color="text.secondary">Next generator phase: convert this contract into a complete Spring Boot + React + MySQL source tree, including migrations, security, tests, Docker and CI/CD.</Typography></Paper>;
-}
+function ProjectStep({ project, updateProject }) { return <Paper sx={{ p: 4 }}><Typography variant="h5" fontWeight={750} gutterBottom>Project foundation</Typography><Stack spacing={2}><TextField label="Project name" value={project.name} onChange={(e) => updateProject('name', e.target.value)} fullWidth /><TextField label="Java package" value={project.packageName} onChange={(e) => updateProject('packageName', e.target.value)} fullWidth /><Stack direction={{ xs: 'column', md: 'row' }} spacing={2}><TextField select label="Java" value={project.java} onChange={(e) => updateProject('java', e.target.value)} fullWidth><MenuItem value="17">Java 17</MenuItem><MenuItem value="21">Java 21</MenuItem></TextField><TextField select label="Database" value={project.database} onChange={(e) => updateProject('database', e.target.value)} fullWidth><MenuItem value="mysql">MySQL</MenuItem><MenuItem value="postgresql">PostgreSQL</MenuItem></TextField></Stack></Stack></Paper>; }
+function ArchitectureStep({ architecture, updateArchitecture }) { const fields = [['backend', 'Backend', ['spring-boot']], ['frontend', 'Frontend', ['react-mui']], ['security', 'Security', ['jwt-rbac']], ['migration', 'Database migrations', ['flyway', 'liquibase']]]; return <Paper sx={{ p: 4 }}><Typography variant="h5" fontWeight={750} gutterBottom>Architecture standards</Typography><Stack spacing={2}>{fields.map(([key, label, values]) => <TextField key={key} select label={label} value={architecture[key]} onChange={(e) => updateArchitecture(key, e.target.value)}>{values.map((v) => <MenuItem key={v} value={v}>{v}</MenuItem>)}</TextField>)}</Stack></Paper>; }
+function ModulesStep({ modules, addModule, removeModule, updateModule }) { return <Stack spacing={2}><Stack direction="row" justifyContent="space-between" alignItems="center"><Box><Typography variant="h5" fontWeight={750}>Business modules</Typography><Typography color="text.secondary">Modules become backend and frontend source trees.</Typography></Box><Button startIcon={<AddRoundedIcon />} variant="contained" onClick={addModule}>Add Module</Button></Stack>{modules.map((module, index) => <Paper key={`${module.name}-${index}`} sx={{ p: 3 }}><Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems="center"><TextField label="Module" value={module.name} onChange={(e) => updateModule(index, 'name', e.target.value)} sx={{ flex: 1 }} /><TextField label="Entity" value={module.entity} onChange={(e) => updateModule(index, 'entity', e.target.value)} sx={{ flex: 1 }} /><TextField label="Fields" value={module.fields} onChange={(e) => updateModule(index, 'fields', e.target.value)} sx={{ flex: 3 }} /><IconButton color="error" onClick={() => removeModule(index)}><DeleteOutlineRoundedIcon /></IconButton></Stack></Paper>)}</Stack>; }
+function ReviewStep({ spec, generate }) { return <Paper sx={{ p: 4 }}><Stack direction="row" justifyContent="space-between" alignItems="center"><Box><Typography variant="h5" fontWeight={750}>Ready to generate</Typography><Typography color="text.secondary">The browser generator packages the configured application into a ZIP file.</Typography></Box><Button variant="contained" startIcon={<RocketLaunchRoundedIcon />} onClick={generate}>Generate Application</Button></Stack><Divider sx={{ my: 3 }} /><Box component="pre" sx={{ m: 0, p: 3, overflow: 'auto', borderRadius: 2, bgcolor: '#070b13', fontSize: 13 }}>{JSON.stringify(spec, null, 2)}</Box></Paper>; }
+function validateClientSpec(spec) { const errors = []; if (!spec.project.name.trim()) errors.push('Project name is required'); if (!spec.project.packageName.trim()) errors.push('Java package is required'); if (!spec.modules.length) errors.push('Add at least one module'); return { valid: errors.length === 0, errors }; }
+function pascal(value) { return value.replace(/[^a-zA-Z0-9]+/g, ' ').trim().split(/\s+/).map((p) => p[0]?.toUpperCase() + p.slice(1).toLowerCase()).join(''); }
+function camel(value) { const p = pascal(value); return p ? p[0].toLowerCase() + p.slice(1) : p; }
+function sql(value) { return camel(value).replace(/[A-Z]/g, (m) => `_${m.toLowerCase()}`).replace(/^_/, ''); }
+function buildClientProject(spec) { const files = {}; const pkg = spec.project.packageName; const pkgPath = pkg.replaceAll('.', '/'); files['README.md'] = `# ${spec.project.name}\n\nGenerated by Enterprise App Builder.\n\nBackend: Spring Boot\nFrontend: React + MUI\nDatabase: ${spec.project.database}\n`; files['backend/pom.xml'] = `<project><modelVersion>4.0.0</modelVersion><groupId>${pkg}</groupId><artifactId>${camel(spec.project.name)}</artifactId><version>0.1.0</version><properties><java.version>${spec.project.java}</java.version></properties></project>`; for (const module of spec.modules) { const entity = pascal(module.entity); const segment = camel(module.name); const fields = module.fields.split(',').map((f) => f.trim()).filter(Boolean); files[`backend/src/main/java/${pkgPath}/module/${segment}/entity/${entity}.java`] = `package ${pkg}.module.${segment}.entity;\n\nimport jakarta.persistence.*;\n\n@Entity\n@Table(name = "${sql(module.entity)}")\npublic class ${entity} {\n    @Id\n    @GeneratedValue(strategy = GenerationType.IDENTITY)\n    private Long id;\n${fields.map((f) => `    private String ${camel(f)};`).join('\n')}\n}`; files[`backend/src/main/java/${pkgPath}/module/${segment}/repository/${entity}Repository.java`] = `package ${pkg}.module.${segment}.repository;\n\nimport ${pkg}.module.${segment}.entity.${entity};\nimport org.springframework.data.jpa.repository.JpaRepository;\n\npublic interface ${entity}Repository extends JpaRepository<${entity}, Long> {}`; files[`backend/src/main/java/${pkgPath}/module/${segment}/controller/${entity}Controller.java`] = `package ${pkg}.module.${segment}.controller;\n\nimport ${pkg}.module.${segment}.entity.${entity};\nimport ${pkg}.module.${segment}.repository.${entity}Repository;\nimport org.springframework.web.bind.annotation.*;\nimport java.util.List;\n\n@RestController\n@RequestMapping("/api/v1/${segment}")\npublic class ${entity}Controller {\n    private final ${entity}Repository repository;\n    public ${entity}Controller(${entity}Repository repository) { this.repository = repository; }\n    @GetMapping public List<${entity}> findAll() { return repository.findAll(); }\n    @PostMapping public ${entity} create(@RequestBody ${entity} entity) { return repository.save(entity); }\n}`; files[`backend/src/main/resources/db/migration/V1__create_${sql(module.entity)}.sql`] = `CREATE TABLE ${sql(module.entity)} (id BIGINT NOT NULL AUTO_INCREMENT, ${fields.map((f) => `${sql(f)} VARCHAR(255)`).join(', ')}, PRIMARY KEY (id));`; files[`frontend/src/modules/${segment}/${entity}List.jsx`] = `import { useEffect, useState } from 'react';\nimport axios from 'axios';\n\nexport default function ${entity}List() { const [rows, setRows] = useState([]); useEffect(() => { axios.get('/api/v1/${segment}').then(({ data }) => setRows(data)); }, []); return <div><h1>${entity}</h1>{rows.map((row) => <pre key={row.id}>{JSON.stringify(row, null, 2)}</pre>)}</div>; }`; } files['generated/project-spec.json'] = JSON.stringify(spec, null, 2); return files; }
 
 createRoot(document.getElementById('root')).render(<ThemeProvider theme={theme}><CssBaseline /><App /></ThemeProvider>);
