@@ -1,0 +1,1 @@
+export function generatorImplementationStatus(){return {status:'enterprise-generator-integration',features:['jwt-rbac','editable-crud','dashboard','flyway','docker'],next:['relationships','data-scopes','generated-tests','zip-validation']};}
