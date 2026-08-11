@@ -1,0 +1,56 @@
+{
+  "project": {
+    "name": "Enterprise CRM",
+    "packageName": "com.example.crm",
+    "database": "mysql",
+    "authentication": "jwt"
+  },
+  "organization": ["Company", "Branch", "Department", "Designation", "Employee"],
+  "modules": [
+    {
+      "name": "Customer",
+      "fields": [
+        {"name":"name","type":"string","required":true},
+        {"name":"email","type":"string","required":true},
+        {"name":"phone","type":"string"},
+        {"name":"status","type":"string"}
+      ]
+    },
+    {
+      "name": "Lead",
+      "fields": [
+        {"name":"customerId","type":"long","required":true,"relation":{"type":"many-to-one","target":"Customer"}},
+        {"name":"assignedEmployeeId","type":"long","relation":{"type":"many-to-one","target":"Employee"}},
+        {"name":"status","type":"string"},
+        {"name":"priority","type":"string"}
+      ]
+    },
+    {
+      "name": "Task",
+      "fields": [
+        {"name":"title","type":"string","required":true},
+        {"name":"assignedEmployeeId","type":"long","relation":{"type":"many-to-one","target":"Employee"}},
+        {"name":"customerId","type":"long","relation":{"type":"many-to-one","target":"Customer"}},
+        {"name":"status","type":"string"}
+      ]
+    }
+  ],
+  "relationships": [
+    {"source":"Lead","target":"Customer","type":"many-to-one","field":"customerId"},
+    {"source":"Lead","target":"Employee","type":"many-to-one","field":"assignedEmployeeId"},
+    {"source":"Task","target":"Customer","type":"many-to-one","field":"customerId"},
+    {"source":"Task","target":"Employee","type":"many-to-one","field":"assignedEmployeeId"}
+  ],
+  "roles": [
+    {"name":"ADMIN","permissions":["*"],"scope":"ALL"},
+    {"name":"SALES_MANAGER","permissions":["CUSTOMER_READ","CUSTOMER_WRITE","LEAD_READ","LEAD_WRITE","TASK_READ","TASK_WRITE"],"scope":"BRANCH"},
+    {"name":"SALES_EXECUTIVE","permissions":["CUSTOMER_READ","CUSTOMER_WRITE","LEAD_READ","LEAD_WRITE","TASK_READ","TASK_WRITE"],"scope":"SELF"}
+  ],
+  "dashboard": {
+    "widgets": [
+      {"type":"count","title":"Customers","module":"Customer"},
+      {"type":"count","title":"Leads","module":"Lead"},
+      {"type":"count","title":"Open Tasks","module":"Task","filter":{"status":"OPEN"}}
+    ]
+  }
+}
